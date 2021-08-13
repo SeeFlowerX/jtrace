@@ -169,6 +169,13 @@ function hook_jni(func_name: string){
                 }
             });
             break;
+        case "GetStringUTFChars":
+            listener = Interceptor.attach(getJAddr("GetStringUTFChars"), {
+                onLeave: function(retval){
+                    log(`/* TID ${gettid()} */ JNIENv->GetStringUTFChars ${retval.readUtf8String()}`);
+                }
+            });
+            break;
         case "FindClass":
             listener = Interceptor.attach(getJAddr("FindClass"), {
                 onEnter: function(args){
@@ -282,6 +289,7 @@ function hook_all_jni(){
 }
 
 hook_all_jni();
+// hook_jni("GetStringUTFChars");
 // hook_jni("SetByteArrayRegion");
 // hook_jni("GetFieldID");
 // hook_jni("GetStaticFieldID");
