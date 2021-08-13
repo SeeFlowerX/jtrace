@@ -1,4 +1,3 @@
-import { off } from "process";
 import { log } from "./logger";
 
 const gettid = new NativeFunction(Module.getExportByName(null, 'gettid'), 'int', []);
@@ -74,7 +73,16 @@ function CallStaticXXXMethodX(name: string, args: NativePointer[]){
     }
 }
 
+function XXXStaticXXXField(name: string, args: NativePointer[]){
+    let clazz = args[1];
+    let class_name: string = Java.vm.tryGetEnv().getClassName(clazz);
+    if (jfieldIDs.has(`${args[2]}`)){
+        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jfieldIDs.get(`${args[2]}`)}`);
+    }
+}
+
 let jmethodIDs = new Map<string, string>();
+let jfieldIDs = new Map<string, string>();
 
 function hook_jni(func_name: string){
     if(func_name.includes("reserved")) return;
@@ -92,16 +100,83 @@ function hook_jni(func_name: string){
                 }
             });
             break;
+        case "GetFieldID":
+            listener = Interceptor.attach(getJAddr("GetFieldID"), {
+                onEnter(args) {
+                    this.tid = gettid();
+                    this.name = Java.vm.tryGetEnv().getClassName(args[1]);
+                    this.sig = `${args[2].readUtf8String()} ${args[3].readUtf8String()}`;
+                },
+                onLeave(retval) {
+                    jfieldIDs.set(`${retval}`, this.sig);
+                    log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                }
+            });
+            break;
+        case "GetStaticFieldID":
+            listener = Interceptor.attach(getJAddr("GetStaticFieldID"), {
+                onEnter(args) {
+                    this.tid = gettid();
+                    this.name = Java.vm.tryGetEnv().getClassName(args[1]);
+                    this.sig = `${args[2].readUtf8String()} ${args[3].readUtf8String()}`;
+                },
+                onLeave(retval) {
+                    jfieldIDs.set(`${retval}`, this.sig);
+                    log(`/* TID ${this.tid} */ JNIENv->GetStaticFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                }
+            });
+            break;
+        case "GetStaticObjectField":
+            listener = Interceptor.attach(getJAddr("GetStaticObjectField"), {onEnter(args) {XXXStaticXXXField("GetStaticObjectField", args)}});break;
+        case "GetStaticBooleanField":
+            listener = Interceptor.attach(getJAddr("GetStaticBooleanField"), {onEnter(args) {XXXStaticXXXField("GetStaticBooleanField", args)}});break;
+        case "GetStaticByteField":
+            listener = Interceptor.attach(getJAddr("GetStaticByteField"), {onEnter(args) {XXXStaticXXXField("GetStaticByteField", args)}});break;
+        case "GetStaticCharField":
+            listener = Interceptor.attach(getJAddr("GetStaticCharField"), {onEnter(args) {XXXStaticXXXField("GetStaticCharField", args)}});break;
+        case "GetStaticShortField":
+            listener = Interceptor.attach(getJAddr("GetStaticShortField"), {onEnter(args) {XXXStaticXXXField("GetStaticShortField", args)}});break;
+        case "GetStaticIntField":
+            listener = Interceptor.attach(getJAddr("GetStaticIntField"), {onEnter(args) {XXXStaticXXXField("GetStaticIntField", args)}});break;
+        case "GetStaticLongField":
+            listener = Interceptor.attach(getJAddr("GetStaticLongField"), {onEnter(args) {XXXStaticXXXField("GetStaticLongField", args)}});break;
+        case "GetStaticFloatField":
+            listener = Interceptor.attach(getJAddr("GetStaticFloatField"), {onEnter(args) {XXXStaticXXXField("GetStaticFloatField", args)}});break;
+        case "GetStaticDoubleField":
+            listener = Interceptor.attach(getJAddr("GetStaticDoubleField"), {onEnter(args) {XXXStaticXXXField("GetStaticDoubleField", args)}});break;
+        case "SetStaticObjectField":
+            listener = Interceptor.attach(getJAddr("SetStaticObjectField"), {onEnter(args) {XXXStaticXXXField("SetStaticObjectField", args)}});break;
+        case "SetStaticBooleanField":
+            listener = Interceptor.attach(getJAddr("SetStaticBooleanField"), {onEnter(args) {XXXStaticXXXField("SetStaticBooleanField", args)}});break;
+        case "SetStaticByteField":
+            listener = Interceptor.attach(getJAddr("SetStaticByteField"), {onEnter(args) {XXXStaticXXXField("SetStaticByteField", args)}});break;
+        case "SetStaticCharField":
+            listener = Interceptor.attach(getJAddr("SetStaticCharField"), {onEnter(args) {XXXStaticXXXField("SetStaticCharField", args)}});break;
+        case "SetStaticShortField":
+            listener = Interceptor.attach(getJAddr("SetStaticShortField"), {onEnter(args) {XXXStaticXXXField("SetStaticShortField", args)}});break;
+        case "SetStaticIntField":
+            listener = Interceptor.attach(getJAddr("SetStaticIntField"), {onEnter(args) {XXXStaticXXXField("SetStaticIntField", args)}});break;
+        case "SetStaticLongField":
+            listener = Interceptor.attach(getJAddr("SetStaticLongField"), {onEnter(args) {XXXStaticXXXField("SetStaticLongField", args)}});break;
+        case "SetStaticFloatField":
+            listener = Interceptor.attach(getJAddr("SetStaticFloatField"), {onEnter(args) {XXXStaticXXXField("SetStaticFloatField", args)}});break;
+        case "SetStaticDoubleField":
+            listener = Interceptor.attach(getJAddr("SetStaticDoubleField"), {onEnter(args) {XXXStaticXXXField("SetStaticDoubleField", args)}});break;
         case "NewStringUTF":
-            log("Interceptor.attach(getJAddr(NewStringUTF)" + func_name)
             listener = Interceptor.attach(getJAddr("NewStringUTF"), {
                 onEnter: function(args){
                     log(`/* TID ${gettid()} */ JNIENv->NewStringUTF ${args[1].readUtf8String()}`);
                 }
             });
             break;
+        case "FindClass":
+            listener = Interceptor.attach(getJAddr("FindClass"), {
+                onEnter: function(args){
+                    log(`/* TID ${gettid()} */ JNIENv->FindClass ${args[1].readUtf8String()}`);
+                }
+            });
+            break;
         case "GetMethodID":
-            log("Interceptor.attach(getJAddr(GetMethodID)" + func_name)
             listener = Interceptor.attach(getJAddr("GetMethodID"), {
                 onEnter(args) {
                     this.tid = gettid();
@@ -110,7 +185,7 @@ function hook_jni(func_name: string){
                 },
                 onLeave(retval) {
                     jmethodIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetMethodID ${this.name} ${this.sig} retval ${retval}`);
+                    log(`/* TID ${this.tid} */ JNIENv->GetMethodID ${this.name} ${this.sig} jmethodID ${retval}`);
                 }
             });
             break;
@@ -123,7 +198,7 @@ function hook_jni(func_name: string){
                 },
                 onLeave(retval) {
                     jmethodIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetStaticMethodID ${this.name} ${this.sig} retval ${retval}`);
+                    log(`/* TID ${this.tid} */ JNIENv->GetStaticMethodID ${this.name} ${this.sig} jmethodID ${retval}`);
                 }
             });
             break;
@@ -201,10 +276,13 @@ function hook_jni(func_name: string){
 
 function hook_all_jni(){
     for (let index in jni_struct_array){
-        log(jni_struct_array[index])
+        // log(jni_struct_array[index])
         hook_jni(jni_struct_array[index]);
     }
 }
 
 hook_all_jni();
 // hook_jni("SetByteArrayRegion");
+// hook_jni("GetFieldID");
+// hook_jni("GetStaticFieldID");
+// hook_jni("GetStaticObjectField");
