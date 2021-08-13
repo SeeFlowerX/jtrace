@@ -1,3 +1,4 @@
+import { off } from "process";
 import { log } from "./logger";
 
 const gettid = new NativeFunction(Module.getExportByName(null, 'gettid'), 'int', []);
@@ -41,11 +42,11 @@ function jhexdump(array: any) {
 
 function jbhexdump(array: any) {
     log("---------jbhexdump start---------");
-    let env = Java.vm.getEnv();
-    let size = env.getArrayLength(array);
-    let data = env.getByteArrayElements(array);
+    let JNIENv = Java.vm.getEnv();
+    let size = JNIENv.getArrayLength(array);
+    let data = JNIENv.getByteArrayElements(array);
     log(hexdump(data, {offset: 0, length: 32, header: false, ansi: false}));
-    env.releaseByteArrayElements(array, data, 0);
+    JNIENv.releaseByteArrayElements(array, data, 0);
     log("---------jbhexdump end---------");
 }
 
@@ -58,49 +59,152 @@ function dumpByteArray(obj: any){
     log("---------dumpByteArray end---------");
 }
 
-function getJNIFunctionAdress(func_name: string){
+function getJAddr(func_name: string){
     // 通过函数名获取到对应的jni函数地址
     let jnienv_addr = Java.vm.getEnv().handle.readPointer()
     let offset = jni_struct_array.indexOf(func_name) * Process.pointerSize;
     return jnienv_addr.add(offset).readPointer()
 }
 
+function CallStaticXXXMethodX(name: string, args: NativePointer[]){
+    let clazz = args[1];
+    let class_name: string = Java.vm.tryGetEnv().getClassName(clazz);
+    if (jmethodIDs.has(`${args[2]}`)){
+        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jmethodIDs.get(`${args[2]}`)}`);
+    }
+}
+
+let jmethodIDs = new Map<string, string>();
+
 function hook_jni(func_name: string){
+    if(func_name.includes("reserved")) return;
     let listener = null;
     switch (func_name){
         case "SetByteArrayRegion":
-            listener = Interceptor.attach(getJNIFunctionAdress(func_name), {
+            listener = Interceptor.attach(getJAddr("SetByteArrayRegion"), {
                 onEnter: function(args){
-                    // log(`env->${func_name} called from ${Thread.backtrace(this.context, Backtracer.ACCURATE).map(DebugSymbol.fromAddress).join("\n")}`);
-                    this.arg_array = args[1];
-                },
-                onLeave: function(retval){
-                    jbhexdump(this.arg_array);
-                    log("SetByteArrayRegion onLeave");
+                    let buf_len = args[3].toUInt32();
+                    if (buf_len > 256){
+                        buf_len = 256;
+                    }
+                    let buffer_hex = hexdump(args[4], {offset: args[2].toUInt32(), length: buf_len, header: true, ansi: false});
+                    log(`/* TID ${gettid()} */ JNIENv->SetByteArrayRegion ${buffer_hex}`)
                 }
-            })
+            });
+            break;
         case "NewStringUTF":
-            listener = Interceptor.attach(getJNIFunctionAdress(func_name), {
+            log("Interceptor.attach(getJAddr(NewStringUTF)" + func_name)
+            listener = Interceptor.attach(getJAddr("NewStringUTF"), {
                 onEnter: function(args){
-                    log(`env->${func_name} called from ${Thread.backtrace(this.context, Backtracer.ACCURATE).map(DebugSymbol.fromAddress).join("\n")}`);
-                    log(`${args[1].readUtf8String()}`);
-                    log('------NewStringUTF end------');
+                    log(`/* TID ${gettid()} */ JNIENv->NewStringUTF ${args[1].readUtf8String()}`);
+                }
+            });
+            break;
+        case "GetMethodID":
+            log("Interceptor.attach(getJAddr(GetMethodID)" + func_name)
+            listener = Interceptor.attach(getJAddr("GetMethodID"), {
+                onEnter(args) {
+                    this.tid = gettid();
+                    this.name = Java.vm.tryGetEnv().getClassName(args[1]);
+                    this.sig = `${args[2].readUtf8String()}${args[3].readUtf8String()}`;
                 },
-                onLeave: function(retval){
+                onLeave(retval) {
+                    jmethodIDs.set(`${retval}`, this.sig);
+                    log(`/* TID ${this.tid} */ JNIENv->GetMethodID ${this.name} ${this.sig} retval ${retval}`);
                 }
-            })
+            });
+            break;
+        case "GetStaticMethodID":
+            listener = Interceptor.attach(getJAddr("GetStaticMethodID"), {
+                onEnter(args) {
+                    this.tid = gettid();
+                    this.name = Java.vm.tryGetEnv().getClassName(args[1]);
+                    this.sig = `${args[2].readUtf8String()}${args[3].readUtf8String()}`;
+                },
+                onLeave(retval) {
+                    jmethodIDs.set(`${retval}`, this.sig);
+                    log(`/* TID ${this.tid} */ JNIENv->GetStaticMethodID ${this.name} ${this.sig} retval ${retval}`);
+                }
+            });
+            break;
+        case "CallStaticObjectMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticObjectMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticObjectMethod", args)}});break;
+        case "CallStaticObjectMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticObjectMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticObjectMethodV", args)}});break;
+        case "CallStaticObjectMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticObjectMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticObjectMethodA", args)}});break;
+        case "CallStaticBooleanMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticBooleanMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticBooleanMethod", args)}});break;
+        case "CallStaticBooleanMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticBooleanMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticBooleanMethodV", args)}});break;
+        case "CallStaticBooleanMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticBooleanMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticBooleanMethodA", args)}});break;
+        case "CallStaticByteMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticByteMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticByteMethod", args)}});break;
+        case "CallStaticByteMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticByteMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticByteMethodV", args)}});break;
+        case "CallStaticByteMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticByteMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticByteMethodA", args)}});break;
+        case "CallStaticCharMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticCharMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticCharMethod", args)}});break;
+        case "CallStaticCharMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticCharMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticCharMethodV", args)}});break;
+        case "CallStaticCharMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticCharMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticCharMethodA", args)}});break;
+        case "CallStaticShortMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticShortMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticShortMethod", args)}});break;
+        case "CallStaticShortMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticShortMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticShortMethodV", args)}});break;
+        case "CallStaticShortMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticShortMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticShortMethodA", args)}});break;
+        case "CallStaticIntMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticIntMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticIntMethod", args)}});break;
+        case "CallStaticIntMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticIntMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticIntMethodV", args)}});break;
+        case "CallStaticIntMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticIntMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticIntMethodA", args)}});break;
+        case "CallStaticLongMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticLongMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticLongMethod", args)}});break;
+        case "CallStaticLongMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticLongMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticLongMethodV", args)}});break;
+        case "CallStaticLongMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticLongMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticLongMethodA", args)}});break;
+        case "CallStaticFloatMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticFloatMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticFloatMethod", args)}});break;
+        case "CallStaticFloatMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticFloatMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticFloatMethodV", args)}});break;
+        case "CallStaticFloatMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticFloatMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticFloatMethodA", args)}});break;
+        case "CallStaticDoubleMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticDoubleMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticDoubleMethod", args)}});break;
+        case "CallStaticDoubleMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticDoubleMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticDoubleMethodV", args)}});break;
+        case "CallStaticDoubleMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticDoubleMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticDoubleMethodA", args)}});break;
+        case "CallStaticVoidMethod":
+            listener = Interceptor.attach(getJAddr("CallStaticVoidMethod"), {onEnter(args) {CallStaticXXXMethodX("CallStaticVoidMethod", args)}});break;
+        case "CallStaticVoidMethodV":
+            listener = Interceptor.attach(getJAddr("CallStaticVoidMethodV"), {onEnter(args) {CallStaticXXXMethodX("CallStaticVoidMethodV", args)}});break;
+        case "CallStaticVoidMethodA":
+            listener = Interceptor.attach(getJAddr("CallStaticVoidMethodA"), {onEnter(args) {CallStaticXXXMethodX("CallStaticVoidMethodA", args)}});break;
         default:
-            listener = Interceptor.attach(getJNIFunctionAdress(func_name), {
-                onEnter: function(args){
-                    log(`env->${func_name} called from ${Thread.backtrace(this.context, Backtracer.ACCURATE).map(DebugSymbol.fromAddress).join("\n")}`);
-                }
-            })
+            // log(`skip JNIENv->${func_name}`);
+            // listener = Interceptor.attach(getJAddr(func_name), {
+            //     onEnter: function(args){
+            //         log(`JNIENv->${func_name} was called`);
+            //         // log(`JNIENv->${func_name} was called from ${Thread.backtrace(this.context, Backtracer.ACCURATE).map(DebugSymbol.fromAddress).join("\n")}`);
+            //     }
+            // })
     }
     return listener;
 }
 
 function hook_all_jni(){
-    for (let func_name in jni_struct_array){
-        hook_jni(func_name);
+    for (let index in jni_struct_array){
+        log(jni_struct_array[index])
+        hook_jni(jni_struct_array[index]);
     }
 }
+
+hook_all_jni();
+// hook_jni("SetByteArrayRegion");

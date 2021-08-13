@@ -1,3 +1,3 @@
-export function log(message: string): void {
+export function log(message: any): void {
     console.log(message);
 }

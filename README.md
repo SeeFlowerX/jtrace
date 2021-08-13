@@ -7,7 +7,9 @@
 # 准备
 
 ```bash
-pip install frida
+pip install frida==14.2.18
+pip install frida-tools==9.2.4
+pip install objection==1.11.0
 pip install hexdump
 npm install
 ```
@@ -15,5 +17,5 @@ npm install
 # 使用
 
 ```bash
-frida -U -l com.android.settings
+frida -U -n com.xingin.xhs -l _agent.js
 ```
