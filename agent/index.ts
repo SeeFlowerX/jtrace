@@ -65,17 +65,22 @@ function getJAddr(func_name: string){
     return jnienv_addr.add(offset).readPointer()
 }
 
+function CallXXXXMethodX(name: string, args: NativePointer[]){
+    let class_name: string = Java.vm.tryGetEnv().getObjectClassName(args[1]);
+    if (jmethodIDs.has(`${args[2]}`)){
+        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jmethodIDs.get(`${args[2]}`)}`);
+    }
+}
+
 function CallStaticXXXMethodX(name: string, args: NativePointer[]){
-    let clazz = args[1];
-    let class_name: string = Java.vm.tryGetEnv().getClassName(clazz);
+    let class_name: string = Java.vm.tryGetEnv().getClassName(args[1]);
     if (jmethodIDs.has(`${args[2]}`)){
         log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jmethodIDs.get(`${args[2]}`)}`);
     }
 }
 
 function XXXStaticXXXField(name: string, args: NativePointer[]){
-    let clazz = args[1];
-    let class_name: string = Java.vm.tryGetEnv().getClassName(clazz);
+    let class_name: string = Java.vm.tryGetEnv().getClassName(args[1]);
     if (jfieldIDs.has(`${args[2]}`)){
         log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jfieldIDs.get(`${args[2]}`)}`);
     }
@@ -172,7 +177,11 @@ function hook_jni(func_name: string){
         case "GetStringUTFChars":
             listener = Interceptor.attach(getJAddr("GetStringUTFChars"), {
                 onLeave: function(retval){
-                    log(`/* TID ${gettid()} */ JNIENv->GetStringUTFChars ${retval.readUtf8String()}`);
+                    let msg: any;
+                    try{msg = retval.readUtf8String()}catch(e){}
+                    if (msg){
+                        log(`/* TID ${gettid()} */ JNIENv->GetStringUTFChars ${msg}`);
+                    }
                 }
             });
             break;
@@ -196,6 +205,126 @@ function hook_jni(func_name: string){
                 }
             });
             break;
+        case "CallObjectMethod":
+            listener = Interceptor.attach(getJAddr("CallObjectMethod"), {onEnter(args) {CallXXXXMethodX("CallObjectMethod", args)}});break;
+        case "CallObjectMethodV":
+            listener = Interceptor.attach(getJAddr("CallObjectMethodV"), {onEnter(args) {CallXXXXMethodX("CallObjectMethodV", args)}});break;
+        case "CallObjectMethodA":
+            listener = Interceptor.attach(getJAddr("CallObjectMethodA"), {onEnter(args) {CallXXXXMethodX("CallObjectMethodA", args)}});break;
+        case "CallBooleanMethod":
+            listener = Interceptor.attach(getJAddr("CallBooleanMethod"), {onEnter(args) {CallXXXXMethodX("CallBooleanMethod", args)}});break;
+        case "CallBooleanMethodV":
+            listener = Interceptor.attach(getJAddr("CallBooleanMethodV"), {onEnter(args) {CallXXXXMethodX("CallBooleanMethodV", args)}});break;
+        case "CallBooleanMethodA":
+            listener = Interceptor.attach(getJAddr("CallBooleanMethodA"), {onEnter(args) {CallXXXXMethodX("CallBooleanMethodA", args)}});break;
+        case "CallByteMethod":
+            listener = Interceptor.attach(getJAddr("CallByteMethod"), {onEnter(args) {CallXXXXMethodX("CallByteMethod", args)}});break;
+        case "CallByteMethodV":
+            listener = Interceptor.attach(getJAddr("CallByteMethodV"), {onEnter(args) {CallXXXXMethodX("CallByteMethodV", args)}});break;
+        case "CallByteMethodA":
+            listener = Interceptor.attach(getJAddr("CallByteMethodA"), {onEnter(args) {CallXXXXMethodX("CallByteMethodA", args)}});break;
+        case "CallCharMethod":
+            listener = Interceptor.attach(getJAddr("CallCharMethod"), {onEnter(args) {CallXXXXMethodX("CallCharMethod", args)}});break;
+        case "CallCharMethodV":
+            listener = Interceptor.attach(getJAddr("CallCharMethodV"), {onEnter(args) {CallXXXXMethodX("CallCharMethodV", args)}});break;
+        case "CallCharMethodA":
+            listener = Interceptor.attach(getJAddr("CallCharMethodA"), {onEnter(args) {CallXXXXMethodX("CallCharMethodA", args)}});break;
+        case "CallShortMethod":
+            listener = Interceptor.attach(getJAddr("CallShortMethod"), {onEnter(args) {CallXXXXMethodX("CallShortMethod", args)}});break;
+        case "CallShortMethodV":
+            listener = Interceptor.attach(getJAddr("CallShortMethodV"), {onEnter(args) {CallXXXXMethodX("CallShortMethodV", args)}});break;
+        case "CallShortMethodA":
+            listener = Interceptor.attach(getJAddr("CallShortMethodA"), {onEnter(args) {CallXXXXMethodX("CallShortMethodA", args)}});break;
+        case "CallIntMethod":
+            listener = Interceptor.attach(getJAddr("CallIntMethod"), {onEnter(args) {CallXXXXMethodX("CallIntMethod", args)}});break;
+        case "CallIntMethodV":
+            listener = Interceptor.attach(getJAddr("CallIntMethodV"), {onEnter(args) {CallXXXXMethodX("CallIntMethodV", args)}});break;
+        case "CallIntMethodA":
+            listener = Interceptor.attach(getJAddr("CallIntMethodA"), {onEnter(args) {CallXXXXMethodX("CallIntMethodA", args)}});break;
+        case "CallLongMethod":
+            listener = Interceptor.attach(getJAddr("CallLongMethod"), {onEnter(args) {CallXXXXMethodX("CallLongMethod", args)}});break;
+        case "CallLongMethodV":
+            listener = Interceptor.attach(getJAddr("CallLongMethodV"), {onEnter(args) {CallXXXXMethodX("CallLongMethodV", args)}});break;
+        case "CallLongMethodA":
+            listener = Interceptor.attach(getJAddr("CallLongMethodA"), {onEnter(args) {CallXXXXMethodX("CallLongMethodA", args)}});break;
+        case "CallFloatMethod":
+            listener = Interceptor.attach(getJAddr("CallFloatMethod"), {onEnter(args) {CallXXXXMethodX("CallFloatMethod", args)}});break;
+        case "CallFloatMethodV":
+            listener = Interceptor.attach(getJAddr("CallFloatMethodV"), {onEnter(args) {CallXXXXMethodX("CallFloatMethodV", args)}});break;
+        case "CallFloatMethodA":
+            listener = Interceptor.attach(getJAddr("CallFloatMethodA"), {onEnter(args) {CallXXXXMethodX("CallFloatMethodA", args)}});break;
+        case "CallDoubleMethod":
+            listener = Interceptor.attach(getJAddr("CallDoubleMethod"), {onEnter(args) {CallXXXXMethodX("CallDoubleMethod", args)}});break;
+        case "CallDoubleMethodV":
+            listener = Interceptor.attach(getJAddr("CallDoubleMethodV"), {onEnter(args) {CallXXXXMethodX("CallDoubleMethodV", args)}});break;
+        case "CallDoubleMethodA":
+            listener = Interceptor.attach(getJAddr("CallDoubleMethodA"), {onEnter(args) {CallXXXXMethodX("CallDoubleMethodA", args)}});break;
+        case "CallVoidMethod":
+            listener = Interceptor.attach(getJAddr("CallVoidMethod"), {onEnter(args) {CallXXXXMethodX("CallVoidMethod", args)}});break;
+        case "CallVoidMethodV":
+            listener = Interceptor.attach(getJAddr("CallVoidMethodV"), {onEnter(args) {CallXXXXMethodX("CallVoidMethodV", args)}});break;
+        case "CallVoidMethodA":
+            listener = Interceptor.attach(getJAddr("CallVoidMethodA"), {onEnter(args) {CallXXXXMethodX("CallVoidMethodA", args)}});break;
+        case "CallNonvirtualObjectMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualObjectMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualObjectMethod", args)}});break;
+        case "CallNonvirtualObjectMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualObjectMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualObjectMethodV", args)}});break;
+        case "CallNonvirtualObjectMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualObjectMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualObjectMethodA", args)}});break;
+        case "CallNonvirtualBooleanMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualBooleanMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualBooleanMethod", args)}});break;
+        case "CallNonvirtualBooleanMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualBooleanMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualBooleanMethodV", args)}});break;
+        case "CallNonvirtualBooleanMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualBooleanMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualBooleanMethodA", args)}});break;
+        case "CallNonvirtualByteMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualByteMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualByteMethod", args)}});break;
+        case "CallNonvirtualByteMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualByteMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualByteMethodV", args)}});break;
+        case "CallNonvirtualByteMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualByteMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualByteMethodA", args)}});break;
+        case "CallNonvirtualCharMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualCharMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualCharMethod", args)}});break;
+        case "CallNonvirtualCharMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualCharMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualCharMethodV", args)}});break;
+        case "CallNonvirtualCharMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualCharMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualCharMethodA", args)}});break;
+        case "CallNonvirtualShortMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualShortMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualShortMethod", args)}});break;
+        case "CallNonvirtualShortMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualShortMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualShortMethodV", args)}});break;
+        case "CallNonvirtualShortMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualShortMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualShortMethodA", args)}});break;
+        case "CallNonvirtualIntMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualIntMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualIntMethod", args)}});break;
+        case "CallNonvirtualIntMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualIntMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualIntMethodV", args)}});break;
+        case "CallNonvirtualIntMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualIntMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualIntMethodA", args)}});break;
+        case "CallNonvirtualLongMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualLongMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualLongMethod", args)}});break;
+        case "CallNonvirtualLongMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualLongMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualLongMethodV", args)}});break;
+        case "CallNonvirtualLongMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualLongMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualLongMethodA", args)}});break;
+        case "CallNonvirtualFloatMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualFloatMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualFloatMethod", args)}});break;
+        case "CallNonvirtualFloatMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualFloatMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualFloatMethodV", args)}});break;
+        case "CallNonvirtualFloatMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualFloatMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualFloatMethodA", args)}});break;
+        case "CallNonvirtualDoubleMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualDoubleMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualDoubleMethod", args)}});break;
+        case "CallNonvirtualDoubleMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualDoubleMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualDoubleMethodV", args)}});break;
+        case "CallNonvirtualDoubleMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualDoubleMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualDoubleMethodA", args)}});break;
+        case "CallNonvirtualVoidMethod":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualVoidMethod"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualVoidMethod", args)}});break;
+        case "CallNonvirtualVoidMethodV":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualVoidMethodV"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualVoidMethodV", args)}});break;
+        case "CallNonvirtualVoidMethodA":
+            listener = Interceptor.attach(getJAddr("CallNonvirtualVoidMethodA"), {onEnter(args) {CallXXXXMethodX("CallNonvirtualVoidMethodA", args)}});break;
         case "GetStaticMethodID":
             listener = Interceptor.attach(getJAddr("GetStaticMethodID"), {
                 onEnter(args) {
@@ -294,3 +423,6 @@ hook_all_jni();
 // hook_jni("GetFieldID");
 // hook_jni("GetStaticFieldID");
 // hook_jni("GetStaticObjectField");
+// hook_jni("GetMethodID");
+// hook_jni("CallObjectMethod");
+// hook_jni("GetStaticMethodID");

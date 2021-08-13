@@ -17,5 +17,5 @@ npm install
 # 使用
 
 ```bash
-frida -U -n com.xingin.xhs -l _agent.js
+frida -U -n com.xingin.xhs -l _agent.js -o jni.log
 ```
