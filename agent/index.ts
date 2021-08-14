@@ -219,7 +219,7 @@ function hook_jni(func_name: string){
                 onLeave(retval) {
                     jfieldIDs.set(`${retval}`, this.sig);
                     // log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
-                    // if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                    if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
                 }
             });
             break;
@@ -249,7 +249,9 @@ function hook_jni(func_name: string){
                         let field_msg = Java.vm.tryGetEnv().getClassName(retval);
                         LogClassReturn("GetObjectField", this.signature, field_msg);
                     }
-                    // log(`${this.base_msg} ${this.signature} ${retval}`)
+                    else if (!switch_flag){
+                        log(`${this.base_msg} ${this.signature} ${retval}`)
+                    }
                 }
             });
             break;
@@ -332,7 +334,7 @@ function hook_jni(func_name: string){
                         LogLongReturn("GetStaticObjectField", this.signature, retval.toUInt32());
                     }
                     else{
-                        log(`${this.signature} ${retval}`)
+                        log(`${this.base_msg} ${this.signature} ${retval}`)
                     }
                 }
             });
