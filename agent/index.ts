@@ -1,4 +1,5 @@
 import { log } from "./logger";
+import { CertificateMeta } from "./templates/getObjectField/Signature";
 
 const gettid = new NativeFunction(Module.getExportByName(null, 'gettid'), 'int', []);
 const getpid = new NativeFunction(Module.getExportByName(null, 'getpid'), 'int', []);
@@ -72,6 +73,14 @@ function CallXXXXMethodX(name: string, args: NativePointer[]){
     }
 }
 
+function CallXXXXMethodXRET(name: string, args: NativePointer[]){
+    let class_name: string = Java.vm.tryGetEnv().getObjectClassName(args[1]);
+    if (jmethodIDs.has(`${args[2]}`)){
+        return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jmethodIDs.get(`${args[2]}`)}`;
+    }
+    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${args[2]}`;
+}
+
 function CallStaticXXXMethodX(name: string, args: NativePointer[]){
     let class_name: string = Java.vm.tryGetEnv().getClassName(args[1]);
     if (jmethodIDs.has(`${args[2]}`)){
@@ -94,13 +103,14 @@ function XXXStaticXXXFieldRET(name: string, args: NativePointer[]): string{
     return `/* TID ${gettid()} */ JNIENv->${name} ${class_name}`;
 }
 
-function XXXFieldRET(name: string, args: NativePointer[]): string{
+function XXXFieldRET(name: string, args: NativePointer[]): [string, string]{
     // return `${Java.vm.tryGetEnv().getClassName(args[1])}`;
+    let base_msg = `/* TID ${gettid()} */ JNIENv->${name}`;
     let class_name: string = Java.vm.tryGetEnv().getObjectClassName(args[1]);
     if (jfieldIDs.has(`${args[2]}`)){
-        return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`;
+        return [base_msg, `${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`];
     }
-    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${args[2]}`;
+    return [base_msg, `${class_name.replaceAll(".", "/")}->${args[2]}`];
 }
 
 function init_jfieldID_by_cls_name(cls_name: string){
@@ -112,6 +122,7 @@ function init_jfieldID_by_cls_name(cls_name: string){
                 let cls_field = fields[i];
                 cls_field.setAccessible(true);
                 let name = cls_field.getName();
+                // console.log("**--*", cls_field, name)
                 if (name == "$assertionsDisabled") continue;
                 let sig_name: string = cls_field.getType().getName();
                 if(name2sig.has(sig_name)){
@@ -119,7 +130,7 @@ function init_jfieldID_by_cls_name(cls_name: string){
                     let clazz = Java.vm.tryGetEnv().findClass(cls_name.replaceAll(".", "/"));
                     let jfieldID = Java.vm.tryGetEnv().getFieldId(clazz, name, sig);
                     jfieldIDs.set(`${jfieldID}`, `${name}:${sig}`);
-                    // console.log("***", cls_field, name, clazz, jfieldID)
+                    console.log("***", cls_field, name, clazz, jfieldID)
                     // 调用了getFieldId 这里不用设置 jfieldIDs
                 }
             }
@@ -128,6 +139,45 @@ function init_jfieldID_by_cls_name(cls_name: string){
 
         }
     })
+}
+
+function bytes2hex(array: any) {
+    var result = '';
+    // console.log('len = ' + array.length);
+    for(var i = 0; i < array.length; ++i)
+        result += ('0' + (array[i] & 0xFF).toString(16)).slice(-2);
+    return result;
+}
+
+function md5Digest_bytes(input: any) {
+    let digest = Java.use("java.security.MessageDigest").getInstance("md5");
+    digest.update(input);
+    return bytes2hex(digest.digest());
+}
+
+function md5Digest_string(input: any) {
+    let digest = Java.use("java.security.MessageDigest").getInstance("md5");
+    let charset = Java.use("java.nio.charset.StandardCharsets").UTF_8.value
+    digest.update(input.getBytes(charset));
+    return bytes2hex(digest.digest());
+}
+
+function LogSignatureMetadata(obj: any){
+    let cf = Java.use("java.security.cert.CertificateFactory").getInstance("X.509");
+    let is = Java.use("java.io.ByteArrayInputStream").$new(obj.toByteArray());
+    let cert = Java.cast(cf.generateCertificate(is), Java.use("java.security.cert.X509Certificate"));
+    let buf = cert.getEncoded();
+    let sighex = bytes2hex(buf);
+    let publicKeyString = Java.use("java.lang.String").$new(sighex.toUpperCase());
+    CertificateMeta(
+        cert.getSigAlgName().toUpperCase(),
+        cert.getSigAlgOID(),
+        cert.getNotBefore().getTime(),
+        cert.getNotAfter().getTime(),
+        sighex,
+        md5Digest_bytes(buf),
+        md5Digest_string(publicKeyString),
+    );
 }
 
 let jmethodIDs = new Map<string, string>();
@@ -168,60 +218,62 @@ function hook_jni(func_name: string){
                 },
                 onLeave(retval) {
                     jfieldIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                    // log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
                     // if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
                 }
             });
             break;
         case "GetObjectField":
             listener = Interceptor.attach(getJAddr("GetObjectField"), {
-                onEnter(args) {this.log_msg = XXXFieldRET("GetObjectField", args)},
+                onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetObjectField", args);this.hhh = args[1]},
                 onLeave(retval){
-                    let field_msg: any = retval;
-                    if(this.log_msg.endsWith(":Ljava/lang/String;")){
-                        field_msg = Java.vm.tryGetEnv().getStringUtfChars(retval).readUtf8String();
+                    switch(this.signature){
+                        case "android/content/pm/PackageInfo->signatures:[Landroid/content/pm/Signature;":
+                            let length = Java.vm.tryGetEnv().getArrayLength(retval);
+                            for (let i = 0; i < length; i++){
+                                let jobj = Java.vm.tryGetEnv().getObjectArrayElement(retval, i);
+                                let obj = Java.cast(jobj, Java.use("android.content.pm.Signature"));
+                                LogSignatureMetadata(obj);
+                            }
+                            break;
+                        default:
+
                     }
-                    else if(this.log_msg.endsWith(":Ljava/lang/Class;")){
-                        field_msg = Java.vm.tryGetEnv().getClassName(retval);;
-                    }
-                    else if(this.log_msg.endsWith(":I")){
-                        field_msg = `${retval.toUInt32()}`;
-                    }
-                    log(`${this.log_msg} ${field_msg}`)
+                    // log(`${this.base_msg} ${this.signature} ${retval}`)
                 }
             });
             break;
         case "GetBooleanField":
-            listener = Interceptor.attach(getJAddr("GetBooleanField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetBooleanField", args)}, onLeave(retval){log(`${this.log_msg} ${Boolean(retval.toUInt32())}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetBooleanField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetBooleanField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${Boolean(retval.toUInt32())}`)}});break;
         case "GetByteField":
-            listener = Interceptor.attach(getJAddr("GetByteField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetByteField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetByteField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetByteField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "GetCharField":
-            listener = Interceptor.attach(getJAddr("GetCharField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetCharField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetCharField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetCharField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "GetShortField":
-            listener = Interceptor.attach(getJAddr("GetShortField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetShortField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetShortField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetShortField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval.toUInt32()}`)}});break;
         case "GetIntField":
-            listener = Interceptor.attach(getJAddr("GetIntField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetIntField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetIntField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetIntField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval.toUInt32()}`)}});break;
         case "GetLongField":
-            listener = Interceptor.attach(getJAddr("GetLongField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetLongField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}L`)}});break;
+            listener = Interceptor.attach(getJAddr("GetLongField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetLongField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval.toUInt32()}L`)}});break;
         case "GetFloatField":
-            listener = Interceptor.attach(getJAddr("GetFloatField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetFloatField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetFloatField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetFloatField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "GetDoubleField":
-            listener = Interceptor.attach(getJAddr("GetDoubleField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetDoubleField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetDoubleField"), {onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetDoubleField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "SetObjectField":
             listener = Interceptor.attach(getJAddr("SetObjectField"), {
                 onEnter(args) {
-                    this.log_msg = XXXFieldRET("SetObjectField", args);
+                    [this.base_msg, this.signature] = XXXFieldRET("SetObjectField", args);
                     let val: any = args[3];
-                    if(this.log_msg.endsWith(":Ljava/lang/String;")){
+                    if(this.signature.endsWith(":Ljava/lang/String;")){
                         val = Java.vm.tryGetEnv().getStringUtfChars(val).readUtf8String();
                     }
-                    else if(this.log_msg.endsWith(":Ljava/lang/Class;")){
+                    else if(this.signature.endsWith(":Ljava/lang/Class;")){
                         val = Java.vm.tryGetEnv().getClassName(val);;
                     }
-                    else if(this.log_msg.endsWith(":I")){
+                    else if(this.signature.endsWith(":I")){
                         val = `${val.toUInt32()}`;
                     }
-                    log(`${this.log_msg} ${val}`)
+                    log(`${this.base_msg} ${this.signature} ${val}`)
                 }
             });
             break;
@@ -347,7 +399,25 @@ function hook_jni(func_name: string){
         case "CallObjectMethod":
             listener = Interceptor.attach(getJAddr("CallObjectMethod"), {onEnter(args) {CallXXXXMethodX("CallObjectMethod", args)}});break;
         case "CallObjectMethodV":
-            listener = Interceptor.attach(getJAddr("CallObjectMethodV"), {onEnter(args) {CallXXXXMethodX("CallObjectMethodV", args)}});break;
+            listener = Interceptor.attach(getJAddr("CallObjectMethodV"), {
+                onEnter(args) {
+                    this.log_msg = CallXXXXMethodXRET("CallObjectMethodV", args);
+                },
+                onLeave(retval) {
+                    let val: any = retval;
+                    if(this.log_msg.endsWith(")Ljava/lang/String;")){
+                        val = Java.vm.tryGetEnv().getStringUtfChars(val).readUtf8String();
+                    }
+                    else if(this.log_msg.endsWith(")Ljava/lang/Class;")){
+                        val = Java.vm.tryGetEnv().getClassName(val);;
+                    }
+                    else if(this.log_msg.endsWith(")I")){
+                        val = val.toUInt32();
+                    }
+                    log(`${this.log_msg} ${val}`)
+                },
+            });
+                break;
         case "CallObjectMethodA":
             listener = Interceptor.attach(getJAddr("CallObjectMethodA"), {onEnter(args) {CallXXXXMethodX("CallObjectMethodA", args)}});break;
         case "CallBooleanMethod":
@@ -549,6 +619,22 @@ function hook_jni(func_name: string){
     return listener;
 }
 
+function java_hook(){
+    Java.perform(function(){
+        let cls = Java.use("android.content.pm.Signature");
+        console.log("clscls", cls)
+        cls.toCharsString.overload().implementation = function(){
+            let ret = this.toCharsString();
+            console.log("000", ret)
+            return ret
+        }
+    })
+}
+
+// setTimeout(() => {
+// java_hook()
+// }, 300);
+
 function hook_all_jni(){
     for (let index in jni_struct_array){
         // log(jni_struct_array[index])
@@ -558,19 +644,21 @@ function hook_all_jni(){
 
 let show_cache_log = false;
 
-init_jfieldID_by_cls_name("java.io.FileDescriptor");
-init_jfieldID_by_cls_name("java.util.zip.Deflater");
-init_jfieldID_by_cls_name("android.graphics.BitmapFactory");
-init_jfieldID_by_cls_name("android.graphics.BitmapFactory$Options");
+// init_jfieldID_by_cls_name("java.io.FileDescriptor");
+// init_jfieldID_by_cls_name("java.util.zip.Deflater");
+// init_jfieldID_by_cls_name("android.graphics.BitmapFactory");
+// init_jfieldID_by_cls_name("android.graphics.BitmapFactory$Options");
+// init_jfieldID_by_cls_name("com.android.org.conscrypt.NativeRef");
 // 非系统类 可能需要切换PathClassLoader
 // init_jfieldID_by_cls_name("com.facebook.animated.webp.WebPFrame");
 // init_jfieldID_by_cls_name("tv.danmaku.ijk.media.player.IjkMediaPlayer");
 
 hook_all_jni();
+
 // hook_jni("GetStringUTFChars");
 // hook_jni("SetByteArrayRegion");
 // hook_jni("GetFieldID");
-// hook_jni("GetBooleanField");
+// hook_jni("GetObjectField");
 // hook_jni("GetStaticFieldID");
 // hook_jni("GetMethodID");
 // hook_jni("CallObjectMethod");

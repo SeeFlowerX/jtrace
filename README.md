@@ -25,6 +25,8 @@ frida -U -f com.iqiyi.i18n -l _agent.js -o jni.log --no-pause
 frida -U -f com.cmcc.cmvideo.miguc -l _agent.js -o jni.log --no-pause
 ```
 
+脚本正在完善中，使用请自行调整脚本
+
 # 特性
 
 - 日志与unidbg匹配，补环境效率up
