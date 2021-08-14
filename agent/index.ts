@@ -68,14 +68,14 @@ function getJAddr(func_name: string){
 function CallXXXXMethodX(name: string, args: NativePointer[]){
     let class_name: string = Java.vm.tryGetEnv().getObjectClassName(args[1]);
     if (jmethodIDs.has(`${args[2]}`)){
-        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jmethodIDs.get(`${args[2]}`)}`);
+        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jmethodIDs.get(`${args[2]}`)}`);
     }
 }
 
 function CallStaticXXXMethodX(name: string, args: NativePointer[]){
     let class_name: string = Java.vm.tryGetEnv().getClassName(args[1]);
     if (jmethodIDs.has(`${args[2]}`)){
-        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jmethodIDs.get(`${args[2]}`)}`);
+        log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jmethodIDs.get(`${args[2]}`)}`);
     }
 }
 
@@ -84,6 +84,23 @@ function XXXStaticXXXField(name: string, args: NativePointer[]){
     if (jfieldIDs.has(`${args[2]}`)){
         log(`/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${jfieldIDs.get(`${args[2]}`)}`);
     }
+}
+
+function XXXStaticXXXFieldRET(name: string, args: NativePointer[]): string{
+    let class_name: string = Java.vm.tryGetEnv().getClassName(args[1]);
+    if (jfieldIDs.has(`${args[2]}`)){
+        return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`;
+    }
+    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name}`;
+}
+
+function XXXFieldRET(name: string, args: NativePointer[]): string{
+    // return `${Java.vm.tryGetEnv().getClassName(args[1])}`;
+    let class_name: string = Java.vm.tryGetEnv().getObjectClassName(args[1]);
+    if (jfieldIDs.has(`${args[2]}`)){
+        return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`;
+    }
+    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name}`;
 }
 
 let jmethodIDs = new Map<string, string>();
@@ -100,7 +117,7 @@ function hook_jni(func_name: string){
                     if (buf_len > 256){
                         buf_len = 256;
                     }
-                    let buffer_hex = hexdump(args[4], {offset: args[2].toUInt32(), length: buf_len, header: true, ansi: false});
+                    let buffer_hex = hexdump(args[4].add(args[2].toUInt32()), {offset: 0, length: buf_len, header: true, ansi: false});
                     log(`/* TID ${gettid()} */ JNIENv->SetByteArrayRegion ${buffer_hex}`)
                 }
             });
@@ -110,45 +127,129 @@ function hook_jni(func_name: string){
                 onEnter(args) {
                     this.tid = gettid();
                     this.name = Java.vm.tryGetEnv().getClassName(args[1]);
-                    this.sig = `${args[2].readUtf8String()} ${args[3].readUtf8String()}`;
+                    this.sig = `${args[2].readUtf8String()}:${args[3].readUtf8String()}`;
                 },
                 onLeave(retval) {
                     jfieldIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                    if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
                 }
             });
             break;
+        case "GetObjectField":
+            listener = Interceptor.attach(getJAddr("GetObjectField"), {
+                onEnter(args) {this.log_msg = XXXFieldRET("GetObjectField", args)},
+                onLeave(retval){
+                    let field_msg: any = retval;
+                    if(this.log_msg.endsWith(":Ljava/lang/String;")){
+                        field_msg = Java.vm.tryGetEnv().getStringUtfChars(retval).readUtf8String();
+                    }
+                    else if(this.log_msg.endsWith(":Ljava/lang/Class;")){
+                        field_msg = Java.vm.tryGetEnv().getClassName(retval);;
+                    }
+                    else if(this.log_msg.endsWith(":I")){
+                        field_msg = `${retval.toUInt32()}`;
+                    }
+                    log(`${this.log_msg} ${field_msg}`)
+                }
+            });
+            break;
+        case "GetBooleanField":
+            listener = Interceptor.attach(getJAddr("GetBooleanField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetBooleanField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+        case "GetByteField":
+            listener = Interceptor.attach(getJAddr("GetByteField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetByteField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+        case "GetCharField":
+            listener = Interceptor.attach(getJAddr("GetCharField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetCharField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+        case "GetShortField":
+            listener = Interceptor.attach(getJAddr("GetShortField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetShortField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
+        case "GetIntField":
+            listener = Interceptor.attach(getJAddr("GetIntField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetIntField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
+        case "GetLongField":
+            listener = Interceptor.attach(getJAddr("GetLongField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetLongField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}L`)}});break;
+        case "GetFloatField":
+            listener = Interceptor.attach(getJAddr("GetFloatField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetFloatField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+        case "GetDoubleField":
+            listener = Interceptor.attach(getJAddr("GetDoubleField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetDoubleField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+        case "SetObjectField":
+            listener = Interceptor.attach(getJAddr("SetObjectField"), {
+                onEnter(args) {
+                    this.log_msg = XXXFieldRET("SetObjectField", args);
+                    let val: any = args[3];
+                    if(this.log_msg.endsWith(":Ljava/lang/String;")){
+                        val = Java.vm.tryGetEnv().getStringUtfChars(val).readUtf8String();
+                    }
+                    else if(this.log_msg.endsWith(":Ljava/lang/Class;")){
+                        val = Java.vm.tryGetEnv().getClassName(val);;
+                    }
+                    else if(this.log_msg.endsWith(":I")){
+                        val = `${val.toUInt32()}`;
+                    }
+                    log(`${this.log_msg} ${val}`)
+                }
+            });
+            break;
+        case "SetBooleanField":
+            listener = Interceptor.attach(getJAddr("SetBooleanField"), {onEnter(args) {log(`${XXXFieldRET("SetBooleanField", args)} ${Boolean(args[3].toUInt32())}`)}});break;
+        case "SetByteField":
+            listener = Interceptor.attach(getJAddr("SetByteField"), {onEnter(args) {log(`${XXXFieldRET("SetByteField", args)} ${args[3]}`)}});break;
+        case "SetCharField":
+            listener = Interceptor.attach(getJAddr("SetCharField"), {onEnter(args) {log(`${XXXFieldRET("SetCharField", args)} ${args[3]}`)}});break;
+        case "SetShortField":
+            listener = Interceptor.attach(getJAddr("SetShortField"), {onEnter(args) {log(`${XXXFieldRET("SetShortField", args)} ${args[3].toUInt32()}`)}});break;
+        case "SetIntField":
+            listener = Interceptor.attach(getJAddr("SetIntField"), {onEnter(args) {log(`${XXXFieldRET("SetIntField", args)} ${args[3].toUInt32()}`)}});break;
+        case "SetLongField":
+            listener = Interceptor.attach(getJAddr("SetLongField"), {onEnter(args) {log(`${XXXFieldRET("SetLongField", args)} ${args[3].toUInt32()}L`)}});break;
+        case "SetFloatField":
+            listener = Interceptor.attach(getJAddr("SetFloatField"), {onEnter(args) {log(`${XXXFieldRET("SetFloatField", args)} ${args[3]}`)}});break;
+        case "SetDoubleField":
+            listener = Interceptor.attach(getJAddr("SetDoubleField"), {onEnter(args) {log(`${XXXFieldRET("SetDoubleField", args)} ${args[3]}`)}});break;
         case "GetStaticFieldID":
             listener = Interceptor.attach(getJAddr("GetStaticFieldID"), {
                 onEnter(args) {
                     this.tid = gettid();
                     this.name = Java.vm.tryGetEnv().getClassName(args[1]);
-                    this.sig = `${args[2].readUtf8String()} ${args[3].readUtf8String()}`;
+                    this.sig = `${args[2].readUtf8String()}:${args[3].readUtf8String()}`;
                 },
                 onLeave(retval) {
                     jfieldIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetStaticFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                    if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetStaticFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
                 }
             });
             break;
         case "GetStaticObjectField":
-            listener = Interceptor.attach(getJAddr("GetStaticObjectField"), {onEnter(args) {XXXStaticXXXField("GetStaticObjectField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticObjectField"), {
+                onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticObjectField", args)},
+                onLeave(retval){
+                    let val: any = retval;
+                    if(this.log_msg.endsWith(":Ljava/lang/String;")){
+                        val = Java.vm.tryGetEnv().getStringUtfChars(val).readUtf8String();
+                    }
+                    else if(this.log_msg.endsWith(":Ljava/lang/Class;")){
+                        val = Java.vm.tryGetEnv().getClassName(val);;
+                    }
+                    else if(this.log_msg.endsWith(":I")){
+                        val = val.toUInt32();
+                    }
+                    log(`${this.log_msg} ${val}`)
+                }
+            });
+            break;
         case "GetStaticBooleanField":
-            listener = Interceptor.attach(getJAddr("GetStaticBooleanField"), {onEnter(args) {XXXStaticXXXField("GetStaticBooleanField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticBooleanField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticBooleanField", args)}, onLeave(retval){log(`${this.log_msg} ${Boolean(retval.toUInt32())}`)}});break;
         case "GetStaticByteField":
-            listener = Interceptor.attach(getJAddr("GetStaticByteField"), {onEnter(args) {XXXStaticXXXField("GetStaticByteField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticByteField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticByteField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
         case "GetStaticCharField":
-            listener = Interceptor.attach(getJAddr("GetStaticCharField"), {onEnter(args) {XXXStaticXXXField("GetStaticCharField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticCharField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticCharField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
         case "GetStaticShortField":
-            listener = Interceptor.attach(getJAddr("GetStaticShortField"), {onEnter(args) {XXXStaticXXXField("GetStaticShortField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticShortField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticShortField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
         case "GetStaticIntField":
-            listener = Interceptor.attach(getJAddr("GetStaticIntField"), {onEnter(args) {XXXStaticXXXField("GetStaticIntField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticIntField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticIntField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
         case "GetStaticLongField":
-            listener = Interceptor.attach(getJAddr("GetStaticLongField"), {onEnter(args) {XXXStaticXXXField("GetStaticLongField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticLongField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticLongField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}L`)}});break;
         case "GetStaticFloatField":
-            listener = Interceptor.attach(getJAddr("GetStaticFloatField"), {onEnter(args) {XXXStaticXXXField("GetStaticFloatField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticFloatField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticFloatField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
         case "GetStaticDoubleField":
-            listener = Interceptor.attach(getJAddr("GetStaticDoubleField"), {onEnter(args) {XXXStaticXXXField("GetStaticDoubleField", args)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticDoubleField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticDoubleField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
         case "SetStaticObjectField":
             listener = Interceptor.attach(getJAddr("SetStaticObjectField"), {onEnter(args) {XXXStaticXXXField("SetStaticObjectField", args)}});break;
         case "SetStaticBooleanField":
@@ -201,7 +302,7 @@ function hook_jni(func_name: string){
                 },
                 onLeave(retval) {
                     jmethodIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetMethodID ${this.name} ${this.sig} jmethodID ${retval}`);
+                    if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetMethodID ${this.name}->${this.sig} jmethodID ${retval}`);
                 }
             });
             break;
@@ -334,7 +435,7 @@ function hook_jni(func_name: string){
                 },
                 onLeave(retval) {
                     jmethodIDs.set(`${retval}`, this.sig);
-                    log(`/* TID ${this.tid} */ JNIENv->GetStaticMethodID ${this.name} ${this.sig} jmethodID ${retval}`);
+                    if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetStaticMethodID ${this.name}->${this.sig} jmethodID ${retval}`);
                 }
             });
             break;
@@ -417,12 +518,13 @@ function hook_all_jni(){
     }
 }
 
+let show_cache_log = false;
+
 hook_all_jni();
 // hook_jni("GetStringUTFChars");
 // hook_jni("SetByteArrayRegion");
 // hook_jni("GetFieldID");
-// hook_jni("GetStaticFieldID");
-// hook_jni("GetStaticObjectField");
+// hook_jni("GetIntField");
 // hook_jni("GetMethodID");
 // hook_jni("CallObjectMethod");
 // hook_jni("GetStaticMethodID");
