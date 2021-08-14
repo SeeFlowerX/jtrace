@@ -100,11 +100,48 @@ function XXXFieldRET(name: string, args: NativePointer[]): string{
     if (jfieldIDs.has(`${args[2]}`)){
         return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`;
     }
-    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name}`;
+    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name} ${args[2]}`;
+}
+
+function init_jfieldID_by_cls_name(cls_name: string){
+    Java.perform(function(){
+        let DeflaterCls = Java.use(cls_name);
+        let fields = DeflaterCls.class.getDeclaredFields();
+        for (let i = 0; i < fields.length; i++){
+            try{
+                let cls_field = fields[i];
+                cls_field.setAccessible(true);
+                let name = cls_field.getName();
+                if (name == "$assertionsDisabled") continue;
+                let sig_name: string = cls_field.getType().getName();
+                if(name2sig.has(sig_name)){
+                    let sig = name2sig.get(sig_name);
+                    let clazz = Java.vm.tryGetEnv().findClass(cls_name.replaceAll(".", "/"));
+                    let jfieldID = Java.vm.tryGetEnv().getFieldId(clazz, name, sig);
+                    jfieldIDs.set(`${jfieldID}`, `${name}:${sig}`);
+                    // console.log("***", cls_field, name, clazz, jfieldID)
+                    // 调用了getFieldId 这里不用设置 jfieldIDs
+                }
+            }
+            catch(e){
+            }
+
+        }
+    })
 }
 
 let jmethodIDs = new Map<string, string>();
 let jfieldIDs = new Map<string, string>();
+let name2sig = new Map<string, string>();
+
+name2sig.set("boolean", "Z");
+name2sig.set("byte", "B");
+name2sig.set("char", "C");
+name2sig.set("short", "S");
+name2sig.set("int", "I");
+name2sig.set("long", "J");
+name2sig.set("float", "F");
+name2sig.set("double", "D");
 
 function hook_jni(func_name: string){
     if(func_name.includes("reserved")) return;
@@ -131,7 +168,8 @@ function hook_jni(func_name: string){
                 },
                 onLeave(retval) {
                     jfieldIDs.set(`${retval}`, this.sig);
-                    if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                    log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
+                    // if(show_cache_log) log(`/* TID ${this.tid} */ JNIENv->GetFieldID ${this.name} ${this.sig} jfieldID ${retval}`);
                 }
             });
             break;
@@ -154,7 +192,7 @@ function hook_jni(func_name: string){
             });
             break;
         case "GetBooleanField":
-            listener = Interceptor.attach(getJAddr("GetBooleanField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetBooleanField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetBooleanField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetBooleanField", args)}, onLeave(retval){log(`${this.log_msg} ${Boolean(retval.toUInt32())}`)}});break;
         case "GetByteField":
             listener = Interceptor.attach(getJAddr("GetByteField"), {onEnter(args) {this.log_msg = XXXFieldRET("GetByteField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
         case "GetCharField":
@@ -520,11 +558,20 @@ function hook_all_jni(){
 
 let show_cache_log = false;
 
+init_jfieldID_by_cls_name("java.io.FileDescriptor");
+init_jfieldID_by_cls_name("java.util.zip.Deflater");
+init_jfieldID_by_cls_name("android.graphics.BitmapFactory");
+init_jfieldID_by_cls_name("android.graphics.BitmapFactory$Options");
+// 非系统类 可能需要切换PathClassLoader
+// init_jfieldID_by_cls_name("com.facebook.animated.webp.WebPFrame");
+// init_jfieldID_by_cls_name("tv.danmaku.ijk.media.player.IjkMediaPlayer");
+
 hook_all_jni();
 // hook_jni("GetStringUTFChars");
 // hook_jni("SetByteArrayRegion");
 // hook_jni("GetFieldID");
-// hook_jni("GetIntField");
+// hook_jni("GetBooleanField");
+// hook_jni("GetStaticFieldID");
 // hook_jni("GetMethodID");
 // hook_jni("CallObjectMethod");
 // hook_jni("GetStaticMethodID");
