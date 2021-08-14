@@ -1,5 +1,5 @@
 import { log } from "./logger";
-import { CertificateMeta } from "./templates/getObjectField/Signature";
+import { CertificateMeta, LogStringReturn, LogClassReturn, LogNumReturn, LogLongReturn } from "./templates/unidbg";
 
 const gettid = new NativeFunction(Module.getExportByName(null, 'gettid'), 'int', []);
 const getpid = new NativeFunction(Module.getExportByName(null, 'getpid'), 'int', []);
@@ -95,12 +95,13 @@ function XXXStaticXXXField(name: string, args: NativePointer[]){
     }
 }
 
-function XXXStaticXXXFieldRET(name: string, args: NativePointer[]): string{
+function XXXStaticXXXFieldRET(name: string, args: NativePointer[]): [string, string]{
+    let base_msg = `/* TID ${gettid()} */ JNIENv->${name}`;
     let class_name: string = Java.vm.tryGetEnv().getClassName(args[1]);
     if (jfieldIDs.has(`${args[2]}`)){
-        return `/* TID ${gettid()} */ JNIENv->${name} ${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`;
+        return [base_msg, `${class_name.replaceAll(".", "/")}->${jfieldIDs.get(`${args[2]}`)}`];
     }
-    return `/* TID ${gettid()} */ JNIENv->${name} ${class_name}`;
+    return [base_msg, `${class_name.replaceAll(".", "/")}->${args[2]}`];
 }
 
 function XXXFieldRET(name: string, args: NativePointer[]): [string, string]{
@@ -142,9 +143,8 @@ function init_jfieldID_by_cls_name(cls_name: string){
 }
 
 function bytes2hex(array: any) {
-    var result = '';
-    // console.log('len = ' + array.length);
-    for(var i = 0; i < array.length; ++i)
+    let result = '';
+    for(let i = 0; i < array.length; ++i)
         result += ('0' + (array[i] & 0xFF).toString(16)).slice(-2);
     return result;
 }
@@ -225,8 +225,10 @@ function hook_jni(func_name: string){
             break;
         case "GetObjectField":
             listener = Interceptor.attach(getJAddr("GetObjectField"), {
-                onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetObjectField", args);this.hhh = args[1]},
+                onEnter(args) {[this.base_msg, this.signature] = XXXFieldRET("GetObjectField", args)},
                 onLeave(retval){
+                    let switch_flag = true;
+                    // console.log("this.signaturethis.signature", this.signature)
                     switch(this.signature){
                         case "android/content/pm/PackageInfo->signatures:[Landroid/content/pm/Signature;":
                             let length = Java.vm.tryGetEnv().getArrayLength(retval);
@@ -237,7 +239,21 @@ function hook_jni(func_name: string){
                             }
                             break;
                         default:
-
+                            switch_flag = false;
+                    }
+                    if (!switch_flag && this.signature.endsWith(":Ljava/lang/String;")){
+                        let field_msg = Java.vm.tryGetEnv().getStringUtfChars(retval).readUtf8String();
+                        LogStringReturn("GetObjectField", this.signature, field_msg);
+                    }
+                    else if (!switch_flag && this.signature.endsWith(":Ljava/lang/Class;")){
+                        let field_msg = Java.vm.tryGetEnv().getClassName(retval);
+                        LogClassReturn("GetObjectField", this.signature, field_msg);
+                    }
+                    else if (!switch_flag && this.signature.endsWith(":I")){
+                        LogNumReturn("GetObjectField", this.signature, retval.toUInt32());
+                    }
+                    else if (!switch_flag && this.signature.endsWith(":J")){
+                        LogLongReturn("GetObjectField", this.signature, retval.toUInt32());
                     }
                     // log(`${this.base_msg} ${this.signature} ${retval}`)
                 }
@@ -268,7 +284,7 @@ function hook_jni(func_name: string){
                         val = Java.vm.tryGetEnv().getStringUtfChars(val).readUtf8String();
                     }
                     else if(this.signature.endsWith(":Ljava/lang/Class;")){
-                        val = Java.vm.tryGetEnv().getClassName(val);;
+                        val = Java.vm.tryGetEnv().getClassName(val);
                     }
                     else if(this.signature.endsWith(":I")){
                         val = `${val.toUInt32()}`;
@@ -308,38 +324,68 @@ function hook_jni(func_name: string){
             break;
         case "GetStaticObjectField":
             listener = Interceptor.attach(getJAddr("GetStaticObjectField"), {
-                onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticObjectField", args)},
+                onEnter(args) {[this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticObjectField", args)},
                 onLeave(retval){
-                    let val: any = retval;
-                    if(this.log_msg.endsWith(":Ljava/lang/String;")){
-                        val = Java.vm.tryGetEnv().getStringUtfChars(val).readUtf8String();
+                    if(this.signature.endsWith(":Ljava/lang/String;")){
+                        let field_msg = Java.vm.tryGetEnv().getStringUtfChars(retval).readUtf8String();
+                        LogStringReturn("GetStaticObjectField", this.signature, field_msg);
                     }
-                    else if(this.log_msg.endsWith(":Ljava/lang/Class;")){
-                        val = Java.vm.tryGetEnv().getClassName(val);;
+                    else if(this.signature.endsWith(":Ljava/lang/Class;")){
+                        let field_msg = Java.vm.tryGetEnv().getClassName(retval);
+                        LogClassReturn("GetStaticObjectField", this.signature, field_msg);
                     }
-                    else if(this.log_msg.endsWith(":I")){
-                        val = val.toUInt32();
+                    else if(this.signature.endsWith(":I")){
+                        LogNumReturn("GetStaticObjectField", this.signature, retval.toUInt32());
                     }
-                    log(`${this.log_msg} ${val}`)
+                    else if(this.signature.endsWith(":J")){
+                        LogLongReturn("GetStaticObjectField", this.signature, retval.toUInt32());
+                    }
+                    else{
+                        log(`${this.signature} ${retval}`)
+                    }
                 }
             });
             break;
         case "GetStaticBooleanField":
-            listener = Interceptor.attach(getJAddr("GetStaticBooleanField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticBooleanField", args)}, onLeave(retval){log(`${this.log_msg} ${Boolean(retval.toUInt32())}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticBooleanField"), {onEnter(args) {[this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticBooleanField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${Boolean(retval.toUInt32())}`)}});break;
         case "GetStaticByteField":
-            listener = Interceptor.attach(getJAddr("GetStaticByteField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticByteField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticByteField"), {onEnter(args) {[this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticByteField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "GetStaticCharField":
-            listener = Interceptor.attach(getJAddr("GetStaticCharField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticCharField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticCharField"), {onEnter(args) {[this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticCharField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "GetStaticShortField":
-            listener = Interceptor.attach(getJAddr("GetStaticShortField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticShortField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticShortField"), {
+                onEnter(args) {
+                    [this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticShortField", args)
+                },
+                onLeave(retval){
+                    LogNumReturn("GetStaticShortField", this.signature, retval.toUInt32());
+                }}
+            );
+            break;
         case "GetStaticIntField":
-            listener = Interceptor.attach(getJAddr("GetStaticIntField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticIntField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticIntField"), {
+                onEnter(args) {
+                    [this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticIntField", args)
+                },
+                onLeave(retval){
+                    LogNumReturn("GetStaticIntField", this.signature, retval.toUInt32());
+                }}
+            );
+            break;
         case "GetStaticLongField":
-            listener = Interceptor.attach(getJAddr("GetStaticLongField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticLongField", args)}, onLeave(retval){log(`${this.log_msg} ${retval.toUInt32()}L`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticLongField"), {
+                onEnter(args) {
+                    [this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticLongField", args)
+                },
+                onLeave(retval){
+                    LogLongReturn("GetStaticLongField", this.signature, retval.toUInt32());
+                }}
+            );
+            break;
         case "GetStaticFloatField":
-            listener = Interceptor.attach(getJAddr("GetStaticFloatField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticFloatField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticFloatField"), {onEnter(args) {[this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticFloatField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "GetStaticDoubleField":
-            listener = Interceptor.attach(getJAddr("GetStaticDoubleField"), {onEnter(args) {this.log_msg = XXXStaticXXXFieldRET("GetStaticDoubleField", args)}, onLeave(retval){log(`${this.log_msg} ${retval}`)}});break;
+            listener = Interceptor.attach(getJAddr("GetStaticDoubleField"), {onEnter(args) {[this.base_msg, this.signature] = XXXStaticXXXFieldRET("GetStaticDoubleField", args)}, onLeave(retval){log(`${this.base_msg} ${this.signature} ${retval}`)}});break;
         case "SetStaticObjectField":
             listener = Interceptor.attach(getJAddr("SetStaticObjectField"), {onEnter(args) {XXXStaticXXXField("SetStaticObjectField", args)}});break;
         case "SetStaticBooleanField":
@@ -645,7 +691,7 @@ function hook_all_jni(){
 let show_cache_log = false;
 
 // init_jfieldID_by_cls_name("java.io.FileDescriptor");
-// init_jfieldID_by_cls_name("java.util.zip.Deflater");
+init_jfieldID_by_cls_name("java.util.zip.Deflater");
 // init_jfieldID_by_cls_name("android.graphics.BitmapFactory");
 // init_jfieldID_by_cls_name("android.graphics.BitmapFactory$Options");
 // init_jfieldID_by_cls_name("com.android.org.conscrypt.NativeRef");
@@ -660,6 +706,9 @@ hook_all_jni();
 // hook_jni("GetFieldID");
 // hook_jni("GetObjectField");
 // hook_jni("GetStaticFieldID");
+// hook_jni("GetStaticIntField");
+// hook_jni("GetStaticLongField");
+// hook_jni("GetStaticShortField");
 // hook_jni("GetMethodID");
 // hook_jni("CallObjectMethod");
 // hook_jni("GetStaticMethodID");

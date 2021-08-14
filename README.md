@@ -2,7 +2,7 @@
 
 参考[JNI-Frida-Hook](https://github.com/Areizen/JNI-Frida-Hook)
 
-增加更详细的jni信息打印
+增加更详细的jni信息打印，以辅助unidbg补环境为主要目的
 
 **完善ing**
 
