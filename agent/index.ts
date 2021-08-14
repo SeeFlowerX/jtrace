@@ -63,7 +63,7 @@ function getJAddr(func_name: string){
     // 通过函数名获取到对应的jni函数地址
     let jnienv_addr = Java.vm.getEnv().handle.readPointer()
     let offset = jni_struct_array.indexOf(func_name) * Process.pointerSize;
-    return jnienv_addr.add(offset).readPointer()
+    return jnienv_addr.add(offset).readPointer();
 }
 
 function CallXXXXMethodX(name: string, args: NativePointer[]){
@@ -682,7 +682,7 @@ function hook_all_jni(){
 let show_cache_log = false;
 
 // init_jfieldID_by_cls_name("java.io.FileDescriptor");
-init_jfieldID_by_cls_name("java.util.zip.Deflater");
+// init_jfieldID_by_cls_name("java.util.zip.Deflater");
 // init_jfieldID_by_cls_name("android.graphics.BitmapFactory");
 // init_jfieldID_by_cls_name("android.graphics.BitmapFactory$Options");
 // init_jfieldID_by_cls_name("com.android.org.conscrypt.NativeRef");
