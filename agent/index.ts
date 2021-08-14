@@ -249,12 +249,6 @@ function hook_jni(func_name: string){
                         let field_msg = Java.vm.tryGetEnv().getClassName(retval);
                         LogClassReturn("GetObjectField", this.signature, field_msg);
                     }
-                    else if (!switch_flag && this.signature.endsWith(":I")){
-                        LogNumReturn("GetObjectField", this.signature, retval.toUInt32());
-                    }
-                    else if (!switch_flag && this.signature.endsWith(":J")){
-                        LogLongReturn("GetObjectField", this.signature, retval.toUInt32());
-                    }
                     // log(`${this.base_msg} ${this.signature} ${retval}`)
                 }
             });
@@ -285,9 +279,6 @@ function hook_jni(func_name: string){
                     }
                     else if(this.signature.endsWith(":Ljava/lang/Class;")){
                         val = Java.vm.tryGetEnv().getClassName(val);
-                    }
-                    else if(this.signature.endsWith(":I")){
-                        val = `${val.toUInt32()}`;
                     }
                     log(`${this.base_msg} ${this.signature} ${val}`)
                 }
