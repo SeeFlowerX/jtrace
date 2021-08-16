@@ -25,7 +25,16 @@ frida -U -f com.iqiyi.i18n -l _agent.js -o jni.log --no-pause
 frida -U -f com.cmcc.cmvideo.miguc -l _agent.js -o jni.log --no-pause
 ```
 
-脚本正在完善中，使用请自行调整脚本
+由于不同系统、frida版本所体现的体制不同，因此分了两个版本
+
+- `_agent.js` 更快，但部分环境下可能不支持
+    - 编译命令 `npm run build`
+- `_agent_stable.js` 兼容性更好
+    - 编译命令 `npm run build-stable`
+
+核心关键代码没有区别，主要区别在于stable版将一些调用放在了`Java.perform`中
+
+Tips! 脚本正在完善中，使用请自行调整脚本
 
 # 特性
 

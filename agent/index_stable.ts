@@ -1,9 +1,16 @@
 import { log } from "./logger";
 import { CertificateMeta, LogStringReturn, LogClassReturn, LogNumReturn, LogLongReturn } from "./templates/unidbg";
 
+let jnienv_addr: any = null;
+let get_env_flag: boolean = false;
+
+function get_env_addr(){
+    Java.perform(function(){
+        jnienv_addr = Java.vm.getEnv().handle.readPointer();
+    })
+}
+
 const gettid = new NativeFunction(Module.getExportByName(null, 'gettid'), 'int', []);
-// const getpid = new NativeFunction(Module.getExportByName(null, 'getpid'), 'int', []);
-// const getuid = new NativeFunction(Module.getExportByName(null, 'getuid'), 'int', []);
 
 let jni_struct_array = [
     "reserved0", "reserved1", "reserved2", "reserved3", "GetVersion", "DefineClass", "FindClass", "FromReflectedMethod", "FromReflectedField", "ToReflectedMethod", "GetSuperclass", "IsAssignableFrom", "ToReflectedField", "Throw", "ThrowNew",
@@ -30,10 +37,14 @@ let jni_struct_array = [
     "ReleaseStringCritical", "NewWeakGlobalRef", "DeleteWeakGlobalRef", "ExceptionCheck", "NewDirectByteBuffer", "GetDirectBufferAddress", "GetDirectBufferCapacity", "GetObjectRefType"
 ]
 
-let jnienv_addr = Java.vm.getEnv().handle.readPointer()
 
 function getJAddr(func_name: string){
     // 通过函数名获取到对应的jni函数地址
+    if(!get_env_flag){
+        // 只获取一次 JNIEnv 的地址 不知道有没有问题
+        get_env_flag = true;
+        get_env_addr();
+    }
     let offset = jni_struct_array.indexOf(func_name) * Process.pointerSize;
     return jnienv_addr.add(offset).readPointer();
 }
@@ -671,9 +682,11 @@ function hook_jni(func_name: string){
 }
 
 function hook_all_jni(){
-    for (let index in jni_struct_array){
-        hook_jni(jni_struct_array[index]);
-    }
+    Java.perform(function(){
+        for (let index in jni_struct_array){
+            hook_jni(jni_struct_array[index]);
+        }
+    })
 }
 
 let show_cache_log = false;
